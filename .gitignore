@@ -1,0 +1,53 @@
+# ---- 版本控制排除清单 ----
+# 需求：CHANGELOG.md 不纳入版本控制（保留在源码目录，仅本地查阅）
+CHANGELOG.md
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ---- 虚拟环境 / 依赖 ----
+.venv/
+venv/
+env/
+.pip-bootstrap/
+pip-wheel-metadata/
+
+# ---- 打包产物 ----
+*.spec.bak
+AutoEdge.spec.bak
+
+# ---- 程序运行时产物 ----
+# 每次预览都会写一份诊断日志（程序目录下）
+debug log.txt
+*.log
+# 使用者保存的预设属于本地数据
+presets/*.json
+!presets/.gitkeep
+
+# ---- 测试/诊断输出 ----
+.tmp/
+tmp/
+output/
+out/
+*.tmp
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+*.swp
+*~
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ---- 其它 ----
+*.bak
+*.orig
+*.rej

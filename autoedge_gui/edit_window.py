@@ -24,7 +24,7 @@ import os
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import QPointF, QTimer, Qt
+from PySide6.QtCore import QEvent, QPointF, QTimer, Qt
 from PySide6.QtGui import QAction, QColor, QImage, QKeySequence, QPainter, QPen
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -46,6 +46,7 @@ from autoedge.imgio import ImageData, save_image
 from autoedge.pipeline import LayerStack, render_groups
 from autoedge.render import SS_DEFAULT
 from autoedge_gui.canvas import ImageCanvas, bgr_to_qimage
+from autoedge_gui.dpi_controls import DpiControls
 from autoedge_gui.notifications import error, notify, notify_success
 
 __all__ = ["EditWindow"]
@@ -308,6 +309,10 @@ class EditWindow(QMainWindow):
         bar2.addWidget(QLabel("导出："))
         bar2.addWidget(self.cmb_out_mode)
 
+        # 导出 DPI：与主窗口共用同一个控件类与同一份全局设置
+        self.dpi = DpiControls()
+        bar2.addWidget(self.dpi)
+
         self.btn_export = QPushButton("输出最终图片…")
         self.btn_export.clicked.connect(self.export_final)
         bar2.addWidget(self.btn_export)
@@ -358,6 +363,19 @@ class EditWindow(QMainWindow):
         """导出格式改动：立即记住，与主窗口共用同一个值。"""
         self.output_mode = str(self.cmb_out_mode.currentData())
         app_settings.set_output_mode(self.output_mode)
+
+    # ================================================================== 窗口事件
+    def event(self, event):  # noqa: N802 - Qt 命名
+        """窗口被激活时刷新「输出模式 / DPI」（两个窗口共用全局设置）。"""
+        if event.type() == QEvent.Type.WindowActivate:
+            self._refresh_global_output()
+        return super().event(event)
+
+    def _refresh_global_output(self) -> None:
+        """从设置读回模式与 DPI：主窗口改了以后这里不能还显示旧值。"""
+        self._select_out_mode(app_settings.output_mode())
+        self.output_mode = str(self.cmb_out_mode.currentData())
+        self.dpi.reload()
 
     def _set_tool(self, tool: str) -> None:
         self.tool = tool
@@ -846,7 +864,13 @@ class EditWindow(QMainWindow):
                 scale=1.0,
                 supersample=SS_DEFAULT,   # 导出才做抗锯齿（4x 超采样）
             )
-            save_image(path, bgr, alpha=alpha, expected_shape=(img.height, img.width))
+            save_image(
+                path,
+                bgr,
+                alpha=alpha,
+                expected_shape=(img.height, img.width),
+                dpi=self.dpi.value(),
+            )
         except Exception as exc:  # noqa: BLE001
             error(self, "导出失败", str(exc))
             return

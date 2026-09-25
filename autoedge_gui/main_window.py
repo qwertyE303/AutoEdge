@@ -19,7 +19,7 @@ import traceback
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import QObject, QPointF, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QPointF, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QAction, QColor, QImage, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -97,6 +97,22 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._build_menu()
         self._update_workflow_state()
+
+    # ================================================================== 窗口事件
+    def event(self, event):  # noqa: N802 - Qt 命名
+        """窗口被激活时刷新「输出模式 / DPI」。
+
+        这两个都是**两个窗口共用的全局设置**：在编辑窗口把 DPI 改成 600 以后，
+        主窗口面板上还写着 300，就会出现"界面显示与实际写入不一致"。
+        激活时从设置读回，保证看到的永远是真的（DPI 不影响预览，不会触发重算）。
+        """
+        if event.type() == QEvent.Type.WindowActivate:
+            self._refresh_global_output()
+        return super().event(event)
+
+    def _refresh_global_output(self) -> None:
+        self.panel.refresh_output_settings()
+        self._update_mode_label()
 
     # ================================================================== 便捷访问
     @property
@@ -1260,7 +1276,13 @@ class MainWindow(QMainWindow):
                 scale=1.0,
                 supersample=SS_DEFAULT,   # 导出才做抗锯齿（4x 超采样）
             )
-            save_image(path, bgr, alpha=alpha, expected_shape=(self.image.height, self.image.width))
+            save_image(
+                path,
+                bgr,
+                alpha=alpha,
+                expected_shape=(self.image.height, self.image.width),
+                dpi=self.panel.export_dpi(),
+            )
         except Exception as exc:  # noqa: BLE001
             error(self, "保存失败", str(exc))
             return

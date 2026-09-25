@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from autoedge.config import LineStyle, Preset, SegConfig
+from autoedge_gui.dpi_controls import DpiControls
 
 __all__ = ["ParamPanel"]
 
@@ -213,6 +214,14 @@ class ParamPanel(QScrollArea):
         self._set_mode_combo(app_settings.output_mode())
         self.cmb_mode.currentIndexChanged.connect(self._on_mode_changed)
         f.addRow("模式", self.cmb_mode)
+
+        # 导出 DPI：全局记忆项（与「模式」同构），只影响导出文件的元数据。
+        # 左侧栏只有 ~350px 宽，三个控件横排会把输入框挤到看不清数字，
+        # 所以竖着排成两行 + 一个勾选行。
+        self.dpi = DpiControls(orientation="split")
+        f.addRow("水平 DPI", self.dpi.sp_x)
+        f.addRow("垂直 DPI", self.dpi.sp_y)
+        f.addRow("", self.dpi.chk_link)
         return box
 
     def _set_mode_combo(self, mode: str) -> None:
@@ -352,6 +361,21 @@ class ParamPanel(QScrollArea):
     # ------------------------------------------------------------------ 输出设置
     def output_mode(self) -> str:
         return self.cmb_mode.currentData()
+
+    def export_dpi(self) -> tuple[float, float]:
+        """导出 DPI（现读全局设置，与编辑窗口共用一份）。"""
+        return self.dpi.value()
+
+    def refresh_output_settings(self) -> None:
+        """从全局设置刷新「模式 + DPI」（窗口被激活时调用）。
+
+        两个值都是全局的、编辑窗口也能改，这里重新读回以保证面板显示的
+        就是实际会写进文件的值。
+        """
+        from autoedge import settings as app_settings
+
+        self._set_mode_combo(app_settings.output_mode())
+        self.dpi.reload()
 
     def reference_color(self) -> tuple[int, int, int]:
         return self.preset.reference_color

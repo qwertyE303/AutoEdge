@@ -1,4 +1,4 @@
-"""界面小设置的持久化（最近文件、上次打开/导出目录、输出模式）。
+"""界面小设置的持久化（最近文件、上次打开/导出目录、输出模式、导出 DPI）。
 
 存放位置由 Qt 决定：``%APPDATA%\\AutoEdge\\AutoEdge.ini``（纯文本，可手改）。
 
@@ -14,6 +14,7 @@ QSettings 落在用户配置目录，永远可写，而且每次 setValue 立即
 
 from __future__ import annotations
 
+import math
 import os
 from pathlib import Path
 
@@ -21,9 +22,14 @@ from PySide6.QtCore import QSettings
 
 __all__ = [
     "APP_NAME",
+    "DEFAULT_DPI",
+    "DPI_MAX",
+    "DPI_MIN",
     "MAX_RECENT",
     "clear_recent",
     "config_path",
+    "dpi_linked",
+    "export_dpi",
     "initial_dir",
     "last_export_dir",
     "last_open_dir",
@@ -33,6 +39,8 @@ __all__ = [
     "remember_file",
     "remember_export",
     "remove_recent",
+    "set_dpi_linked",
+    "set_export_dpi",
     "set_last_export_dir",
     "set_last_open_dir",
     "set_output_mode",
@@ -46,10 +54,19 @@ MAX_RECENT = 10
 #: 输出模式（与 ``autoedge.config.OutputMode`` 一致；这里写成字面量以免 config 反向依赖本模块）
 _MODES = ("overlay", "transparent")
 
+#: 导出 DPI 的默认值（原图是 300，导出必须与之一致，否则下游按错误比例处理）
+DEFAULT_DPI = 300.0
+#: 导出 DPI 的合法范围（超出范围一律夹回来；非法值退回默认）
+DPI_MIN = 1.0
+DPI_MAX = 9999.0
+
 _K_RECENT = "recent_files"
 _K_OPEN_DIR = "last_open_dir"
 _K_EXPORT_DIR = "last_export_dir"
 _K_MODE = "output_mode"
+_K_DPI_X = "export_dpi_x"
+_K_DPI_Y = "export_dpi_y"
+_K_DPI_LINK = "export_dpi_link"
 
 
 def settings() -> QSettings:
@@ -152,6 +169,51 @@ def output_mode() -> str:
 def set_output_mode(mode: str) -> None:
     if mode in _MODES:
         settings().setValue(_K_MODE, mode)
+
+
+# ---------------------------------------------------------------------- 导出 DPI
+def _clamp_dpi(value: object, fallback: float = DEFAULT_DPI) -> float:
+    """把任意读到的值收敛成合法 DPI；非法值返回 ``fallback``。
+
+    ini 是可以手改的，手改出 ``300,5``（小数点写成逗号）或负数时不能崩，
+    也不能真的把 0 dpi 写进文件——那种文件比没有 DPI 更麻烦。
+    """
+    try:
+        f = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return fallback
+    if not math.isfinite(f) or f <= 0:
+        return fallback
+    return min(DPI_MAX, max(DPI_MIN, f))
+
+
+def export_dpi() -> tuple[float, float]:
+    """导出图片的 ``(水平, 垂直)`` DPI，默认 **300 × 300**。
+
+    只决定写出文件的元数据（PNG 写 ``pHYs``、JPEG 改写 JFIF density），
+    **不参与任何像素计算**，所以导出尺寸仍严格等于原图。
+    主窗口与编辑窗口共用这一份值。
+    """
+    s = settings()
+    x = _clamp_dpi(s.value(_K_DPI_X, DEFAULT_DPI, type=float))
+    y = _clamp_dpi(s.value(_K_DPI_Y, DEFAULT_DPI, type=float))
+    return x, y
+
+
+def set_export_dpi(x: float, y: float) -> None:
+    """记住导出 DPI（立即落盘，跨会话生效）。"""
+    s = settings()
+    s.setValue(_K_DPI_X, round(_clamp_dpi(x), 4))
+    s.setValue(_K_DPI_Y, round(_clamp_dpi(y), 4))
+
+
+def dpi_linked() -> bool:
+    """水平/垂直是否联动（**默认 True**，与界面复选框初值一致）。"""
+    return bool(settings().value(_K_DPI_LINK, True, type=bool))
+
+
+def set_dpi_linked(linked: bool) -> None:
+    settings().setValue(_K_DPI_LINK, bool(linked))
 
 
 # ---------------------------------------------------------------------- 最近文件
